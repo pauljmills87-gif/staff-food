@@ -12,7 +12,7 @@ type Screen = "LANDING" | "ORDER" | "CONFIRM";
 type PaymentMethod = "CASH" | "REVOLUT";
 
 const WHATSAPP_NUMBER = "351924236232";
-const REVOLUT_LINK = "https://revolut.me/jssica3urs";
+const REVOLUT_LINK = "https://revolut.me/jssicau3rs";
 
 const BARS = [
   "Matt's bar",
