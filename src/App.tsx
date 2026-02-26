@@ -52,6 +52,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("LANDING");
   const [menuOpen, setMenuOpen] = useState(false);
   const [menu, setMenu] = useState<MenuData | null>(null);
+  const [revolutPending, setRevolutPending] = useState(false);
 
   const [name, setName] = useState(localStorage.getItem("mb_name") || "");
   const [bar, setBar] = useState(BARS[0]);
@@ -101,7 +102,9 @@ Payment: ${payment}
     );
 
     if (payment === "REVOLUT") {
-      setTimeout(() => window.open(REVOLUT_LINK, "_blank"), 600);
+      setRevolutPending(true);
+    } else {
+      setRevolutPending(false);
     }
 
     setMainQty(0);
@@ -134,7 +137,23 @@ Payment: ${payment}
         <div style={card}>
           <h2>Thank you — your order has been received.</h2>
           <p>We’ll see you at your scheduled time.</p>
-          <button style={primaryBtn} onClick={() => setScreen("LANDING")}>
+
+          {revolutPending && (
+            <button
+              style={primaryBtn}
+              onClick={() => window.open(REVOLUT_LINK, "_blank")}
+            >
+              Open Revolut to Pay
+            </button>
+          )}
+
+          <button
+            style={secondaryBtn}
+            onClick={() => {
+              setRevolutPending(false);
+              setScreen("LANDING");
+            }}
+          >
             Back to Home
           </button>
         </div>
@@ -183,11 +202,20 @@ Payment: ${payment}
           <label>Payment</label>
           <div>
             <label>
-              <input type="radio" checked={payment==="CASH"} onChange={()=>setPayment("CASH")} />
+              <input
+                type="radio"
+                checked={payment === "CASH"}
+                onChange={() => setPayment("CASH")}
+              />
               Cash
             </label>
+
             <label>
-              <input type="radio" checked={payment==="REVOLUT"} onChange={()=>setPayment("REVOLUT")} />
+              <input
+                type="radio"
+                checked={payment === "REVOLUT"}
+                onChange={() => setPayment("REVOLUT")}
+              />
               Revolut
             </label>
           </div>
@@ -197,7 +225,7 @@ Payment: ${payment}
           </button>
         </div>
 
-        <button style={secondaryBtn} onClick={()=>setScreen("LANDING")}>
+        <button style={secondaryBtn} onClick={() => setScreen("LANDING")}>
           ← Back
         </button>
       </div>
@@ -206,19 +234,28 @@ Payment: ${payment}
 
   return (
     <div style={landingStyle}>
-      <button style={primaryBtn} onClick={()=>setMenuOpen(true)}>
+      <button style={primaryBtn} onClick={() => setMenuOpen(true)}>
         Tonight’s Menu
       </button>
 
-      <button style={secondaryBtn} onClick={()=>setScreen("ORDER")}>
+      <button style={secondaryBtn} onClick={() => setScreen("ORDER")}>
         Book Your Meal
       </button>
 
       {menuOpen && (
         <div style={modal}>
           <div style={modalInner}>
-            <img src="/menu.png" style={{width:"100%",borderRadius:16}} />
-            <button style={primaryBtn} onClick={()=>{setMenuOpen(false);setScreen("ORDER")}}>
+            <img
+              src="/menu.png"
+              style={{ width: "100%", borderRadius: 16 }}
+            />
+            <button
+              style={primaryBtn}
+              onClick={() => {
+                setMenuOpen(false);
+                setScreen("ORDER");
+              }}
+            >
               ORDER NOW
             </button>
           </div>
@@ -228,63 +265,63 @@ Payment: ${payment}
   );
 }
 
-function Qty({qty,setQty}:{qty:number,setQty:(n:number)=>void}) {
+function Qty({ qty, setQty }: { qty: number; setQty: (n: number) => void }) {
   return (
-    <div style={{display:"flex",gap:10,alignItems:"center"}}>
-      <button onClick={()=>setQty(Math.max(0,qty-1))}>-</button>
+    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      <button onClick={() => setQty(Math.max(0, qty - 1))}>-</button>
       {qty}
-      <button onClick={()=>setQty(qty+1)}>+</button>
+      <button onClick={() => setQty(qty + 1)}>+</button>
     </div>
   );
 }
 
 const card = {
-  background:"rgba(0,0,0,0.6)",
-  padding:20,
-  borderRadius:20,
-  marginBottom:20,
-  display:"flex",
-  flexDirection:"column" as const,
-  gap:10
+  background: "rgba(0,0,0,0.6)",
+  padding: 20,
+  borderRadius: 20,
+  marginBottom: 20,
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 10
 };
 
 const primaryBtn = {
-  padding:"16px",
-  borderRadius:20,
-  background:"linear-gradient(135deg,#ff7a00,#ff2d55)",
-  color:"#fff",
-  fontWeight:900,
-  border:"none",
-  fontSize:18,
-  cursor:"pointer"
+  padding: "16px",
+  borderRadius: 20,
+  background: "linear-gradient(135deg,#ff7a00,#ff2d55)",
+  color: "#fff",
+  fontWeight: 900,
+  border: "none",
+  fontSize: 18,
+  cursor: "pointer"
 };
 
 const secondaryBtn = {
-  padding:"14px",
-  borderRadius:20,
-  background:"rgba(255,255,255,0.7)",
-  color:"#000",
-  fontWeight:700,
-  border:"none",
-  cursor:"pointer"
+  padding: "14px",
+  borderRadius: 20,
+  background: "rgba(255,255,255,0.8)",
+  color: "#000",
+  fontWeight: 700,
+  border: "none",
+  cursor: "pointer"
 };
 
 const modal = {
-  position:"fixed" as const,
-  inset:0,
-  background:"rgba(0,0,0,0.8)",
-  display:"flex",
-  alignItems:"center",
-  justifyContent:"center"
+  position: "fixed" as const,
+  inset: 0,
+  background: "rgba(0,0,0,0.8)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center"
 };
 
 const modalInner = {
-  background:"#111",
-  padding:20,
-  borderRadius:20,
-  width:"90%",
-  maxWidth:400,
-  display:"flex",
-  flexDirection:"column" as const,
-  gap:15
+  background: "#111",
+  padding: 20,
+  borderRadius: 20,
+  width: "90%",
+  maxWidth: 400,
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: 15
 };
