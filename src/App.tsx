@@ -10,6 +10,12 @@ type MenuData = {
 
 type Screen = "LANDING" | "ORDER" | "CONFIRM";
 type PaymentMethod = "CASH" | "REVOLUT";
+type Language = "EN" | "PT";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
 const WHATSAPP_NUMBER = "351924236232";
 const REVOLUT_LINK = "https://revolut.me/jssicau3rs";
@@ -27,7 +33,7 @@ const BARS = [
   "Pow tattoo",
   "Sultao",
   "Other"
-];
+] as const;
 
 const translations = {
   EN: {
@@ -44,7 +50,11 @@ const translations = {
     confirmSub: "We’ll see you at your scheduled time.",
     openRevolut: "Open Revolut to Pay",
     backHome: "Back to Home",
-    orderNow: "ORDER NOW"
+    orderNow: "ORDER NOW",
+    install: "📲 Install App",
+    iosGuideLine1: "Install this app on iPhone:",
+    iosGuideLine2: "Tap Share → Add to Home Screen",
+    ok: "OK"
   },
   PT: {
     tonight: "Menu de Hoje",
@@ -60,14 +70,26 @@ const translations = {
     confirmSub: "Vemo-nos à hora escolhida.",
     openRevolut: "Abrir Revolut para Pagar",
     backHome: "Voltar ao Início",
-    orderNow: "PEDIR AGORA"
+    orderNow: "PEDIR AGORA",
+    install: "📲 Instalar App",
+    iosGuideLine1: "Instalar no iPhone:",
+    iosGuideLine2: "Partilhar → Adicionar ao Ecrã Principal",
+    ok: "OK"
   }
 } as const;
 
-function buildSlots() {
+function isIOS(): boolean {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
+
+function isStandalone(): boolean {
+  return window.matchMedia("(display-mode: standalone)").matches;
+}
+
+function buildSlots(): string[] {
   const slots: string[] = [];
-  let total = 20 * 60 + 30;
-  const end = 22 * 60 + 30;
+  let total = 20 * 60 + 30; // 20:30
+  const end = 22 * 60 + 30; // 22:30
 
   while (total <= end) {
     const h = Math.floor(total / 60);
@@ -78,31 +100,40 @@ function buildSlots() {
   return slots;
 }
 
-function eur(n: number) {
+function eur(n: number): string {
   return `€${n.toFixed(2)}`;
 }
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("LANDING");
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menu, setMenu] = useState<MenuData | null>(null);
 
-  const [revolutPending, setRevolutPending] = useState(false);
-
-  const [lang, setLang] = useState<"EN" | "PT">(() => {
+  const [lang, setLang] = useState<Language>(() => {
     const saved = localStorage.getItem("mb_lang");
     return saved === "PT" ? "PT" : "EN";
   });
 
-  const [name, setName] = useState(localStorage.getItem("mb_name") || "");
-  const [bar, setBar] = useState(BARS[0]);
-  const [otherBar, setOtherBar] = useState("");
-  const [slot, setSlot] = useState(buildSlots()[0]);
+  const [menu, setMenu] = useState<MenuData | null>(null);
+  const [menuOpen, setMenuOpen] = useState<boolean>(false);
 
-  const [mainQty, setMainQty] = useState(0);
-  const [dessertQty, setDessertQty] = useState(0);
+  const [name, setName] = useState<string>(() => localStorage.getItem("mb_name") || "");
+  const [bar, setBar] = useState<(typeof BARS)[number]>(BARS[0]);
+  const [otherBar, setOtherBar] = useState<string>("");
+  const [slot, setSlot] = useState<string>(buildSlots()[0]);
+  const [mainQty, setMainQty] = useState<number>(0);
+  const [dessertQty, setDessertQty] = useState<number>(0);
   const [payment, setPayment] = useState<PaymentMethod>("CASH");
+  const [revolutPending, setRevolutPending] = useState<boolean>(false);
 
+  // Android install prompt support
+  const [deferredInstall, setDeferredInstall] = useState<BeforeInstallPromptEvent | null>(null);
+  const [canInstall, setCanInstall] = useState<boolean>(false);
+
+  // iOS install guide (show once)
+  const [showIOSGuide, setShowIOSGuide] = useState<boolean>(false);
+
+  const t = translations[lang];
+
+  // Persist language + name
   useEffect(() => {
     localStorage.setItem("mb_lang", lang);
   }, [lang]);
@@ -111,18 +142,91 @@ export default function App() {
     localStorage.setItem("mb_name", name);
   }, [name]);
 
+  // Load menu.json (cache-bust so your daily update shows)
   useEffect(() => {
-    fetch("/menu.json?v=" + Date.now())
+    fetch(`/menu.json?v=${Date.now()}`)
       .then((res) => res.json())
-      .then((data) => setMenu(data));
+      .then((data: MenuData) => setMenu(data))
+      .catch(() => setMenu(null));
   }, []);
 
-  const total = useMemo(() => {
+  // Android native install prompt hook
+  useEffect(() => {
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredInstall(e as BeforeInstallPromptEvent);
+      setCanInstall(true);
+    };
+
+    const onAppInstalled = () => {
+      setCanInstall(false);
+      setDeferredInstall(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  // iOS guide (only show once, only when not standalone)
+  useEffect(() => {
+    const dismissed = localStorage.getItem("mb_iosGuideDismissed") === "1";
+    if (!dismissed && isIOS() && !isStandalone()) {
+      setShowIOSGuide(true);
+    }
+  }, []);
+
+  async function triggerInstall(): Promise<void> {
+    if (!deferredInstall) return;
+    await deferredInstall.prompt();
+    await deferredInstall.userChoice;
+    setCanInstall(false);
+    setDeferredInstall(null);
+  }
+
+  const total = useMemo<number>(() => {
     if (!menu) return 0;
     return mainQty * menu.mainPrice + dessertQty * menu.dessertPrice;
   }, [menu, mainQty, dessertQty]);
 
-  const t = translations[lang];
+  function placeOrder(): void {
+    if (!menu) return;
+
+    const barName = bar === "Other" ? otherBar.trim() : bar;
+    const safeBar = barName.length ? barName : "Other";
+
+    const message = `
+⭐ NEW STAFF FOOD ORDER
+
+Name: ${name}
+Delivered To: ${safeBar}
+Time: ${slot}
+
+${menu.mainName} x${mainQty}
+${menu.dessertName} x${dessertQty}
+
+Total: ${eur(total)}
+Payment: ${payment}
+`.trim();
+
+    window.open(
+      `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`,
+      "_blank"
+    );
+
+    // iOS-safe: show button on confirm
+    setRevolutPending(payment === "REVOLUT");
+
+    // reset quantities (optional; keeps it tidy)
+    setMainQty(0);
+    setDessertQty(0);
+
+    setScreen("CONFIRM");
+  }
 
   const landingStyle: React.CSSProperties = {
     minHeight: "100vh",
@@ -144,49 +248,24 @@ export default function App() {
     padding: 20
   };
 
-  function placeOrder() {
-    if (!menu) return;
-
-    const barName = bar === "Other" ? otherBar : bar;
-
-    const message = `
-⭐ NEW STAFF FOOD ORDER
-
-Name: ${name}
-Delivered To: ${barName}
-Time: ${slot}
-
-${menu.mainName} x${mainQty}
-${menu.dessertName} x${dessertQty}
-
-Total: ${eur(total)}
-Payment: ${payment}
-`;
-
-    // Always send order message to WhatsApp
-    window.open(
-      `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`,
-      "_blank"
-    );
-
-    // For iOS-safe flow: show Revolut button on confirm
-    setRevolutPending(payment === "REVOLUT");
-
-    // Reset quantities for next order
-    setMainQty(0);
-    setDessertQty(0);
-
-    setScreen("CONFIRM");
-  }
-
-  // ---------- CONFIRM ----------
+  // CONFIRM SCREEN
   if (screen === "CONFIRM") {
     return (
       <div style={landingStyle}>
-        <TopBar lang={lang} setLang={setLang} leftButtonLabel={t.backHome} onLeft={() => { setRevolutPending(false); setScreen("LANDING"); }} />
+        <TopBar
+          lang={lang}
+          setLang={setLang}
+          canInstall={canInstall}
+          onInstall={triggerInstall}
+          leftLabel={t.backHome}
+          onLeft={() => {
+            setRevolutPending(false);
+            setScreen("LANDING");
+          }}
+        />
 
         <div style={{ flex: 1, display: "flex", alignItems: "center" }}>
-          <div style={{ ...card, width: "100%", maxWidth: 460, margin: "0 auto" }}>
+          <div style={{ ...card, width: "100%", maxWidth: 520, margin: "0 auto" }}>
             <h2 style={{ margin: 0 }}>{t.confirmTitle}</h2>
             <p style={{ marginTop: 8, marginBottom: 0 }}>{t.confirmSub}</p>
 
@@ -214,22 +293,24 @@ Payment: ${payment}
     );
   }
 
-  // ---------- ORDER ----------
+  // ORDER SCREEN (full screen)
   if (screen === "ORDER") {
     return (
       <div style={orderStyle}>
         <TopBar
           lang={lang}
           setLang={setLang}
-          leftButtonLabel={t.back}
+          canInstall={canInstall}
+          onInstall={triggerInstall}
+          leftLabel={t.back}
           onLeft={() => setScreen("LANDING")}
         />
 
-        <div style={{ ...card, width: "100%", maxWidth: 520, margin: "0 auto" }}>
-          <h3 style={{ margin: 0 }}>{menu?.mainName}</h3>
+        <div style={{ ...card, width: "100%", maxWidth: 520, margin: "16px auto 0 auto" }}>
+          <h3 style={{ margin: 0 }}>{menu?.mainName ?? "Main"}</h3>
           <Qty qty={mainQty} setQty={setMainQty} />
 
-          <h3 style={{ marginTop: 12, marginBottom: 0 }}>{menu?.dessertName}</h3>
+          <h3 style={{ marginTop: 14, marginBottom: 0 }}>{menu?.dessertName ?? "Dessert"}</h3>
           <Qty qty={dessertQty} setQty={setDessertQty} />
 
           <div style={{ marginTop: 10, fontWeight: 900 }}>
@@ -237,11 +318,13 @@ Payment: ${payment}
           </div>
         </div>
 
-        <div style={{ ...card, width: "100%", maxWidth: 520, margin: "0 auto" }}>
+        <div style={{ ...card, width: "100%", maxWidth: 520, margin: "16px auto 0 auto" }}>
           <label style={labelStyle}>{t.delivered}</label>
-          <select style={inputStyle} value={bar} onChange={(e) => setBar(e.target.value)}>
+          <select style={inputStyle} value={bar} onChange={(e) => setBar(e.target.value as (typeof BARS)[number])}>
             {BARS.map((b) => (
-              <option key={b}>{b}</option>
+              <option key={b} value={b}>
+                {b}
+              </option>
             ))}
           </select>
 
@@ -257,20 +340,18 @@ Payment: ${payment}
           <label style={labelStyle}>{t.time}</label>
           <select style={inputStyle} value={slot} onChange={(e) => setSlot(e.target.value)}>
             {buildSlots().map((s) => (
-              <option key={s}>{s}</option>
+              <option key={s} value={s}>
+                {s}
+              </option>
             ))}
           </select>
 
           <label style={labelStyle}>{t.name}</label>
-          <input
-            style={inputStyle}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+          <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
 
           <label style={labelStyle}>{t.payment}</label>
-          <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <label style={radioRow}>
               <input
                 type="radio"
                 checked={payment === "CASH"}
@@ -278,8 +359,7 @@ Payment: ${payment}
               />
               Cash
             </label>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <label style={radioRow}>
               <input
                 type="radio"
                 checked={payment === "REVOLUT"}
@@ -301,35 +381,59 @@ Payment: ${payment}
     );
   }
 
-  // ---------- LANDING ----------
+  // LANDING SCREEN
   return (
     <div style={landingStyle}>
-      <TopBar lang={lang} setLang={setLang} />
+      <TopBar
+        lang={lang}
+        setLang={setLang}
+        canInstall={canInstall}
+        onInstall={triggerInstall}
+      />
 
-      {/* Lower-third button stack */}
+      {/* lower third stacked buttons */}
       <div style={{ marginTop: "auto", marginBottom: 80, width: "100%", maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <button style={primaryBtnFullWidth} onClick={() => setMenuOpen(true)}>
+          <button style={primaryBtnFull} onClick={() => setMenuOpen(true)}>
             {t.tonight}
           </button>
-          <button style={secondaryBtnFullWidth} onClick={() => setScreen("ORDER")}>
+          <button style={secondaryBtnFull} onClick={() => setScreen("ORDER")}>
             {t.book}
           </button>
         </div>
       </div>
 
-      {/* Menu modal */}
+      {/* iOS install guide (shows once) */}
+      {showIOSGuide && (
+        <div style={modal} onClick={() => undefined}>
+          <div style={modalInner}>
+            <div style={{ fontWeight: 900 }}>{t.iosGuideLine1}</div>
+            <div style={{ opacity: 0.9 }}>{t.iosGuideLine2}</div>
+            <button
+              style={secondaryBtnFull}
+              onClick={() => {
+                localStorage.setItem("mb_iosGuideDismissed", "1");
+                setShowIOSGuide(false);
+              }}
+            >
+              {t.ok}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tonight’s Menu modal */}
       {menuOpen && (
         <div
           style={modal}
-          onClick={() => setMenuOpen(false)} // tap outside closes
+          onClick={() => setMenuOpen(false)}
         >
           <div
             style={modalInner}
-            onClick={(e) => e.stopPropagation()} // prevent close when clicking inside
+            onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontWeight: 900, color: "#fff" }}>{t.tonight}</div>
+              <div style={{ fontWeight: 900 }}>{t.tonight}</div>
               <button style={tinyBtn} onClick={() => setMenuOpen(false)}>
                 {t.close}
               </button>
@@ -338,7 +442,7 @@ Payment: ${payment}
             <img src="/menu.png" style={{ width: "100%", borderRadius: 16 }} />
 
             <button
-              style={primaryBtn}
+              style={primaryBtnFull}
               onClick={() => {
                 setMenuOpen(false);
                 setScreen("ORDER");
@@ -347,7 +451,7 @@ Payment: ${payment}
               {t.orderNow}
             </button>
 
-            <button style={secondaryBtn} onClick={() => setMenuOpen(false)}>
+            <button style={secondaryBtnFull} onClick={() => setMenuOpen(false)}>
               {t.close}
             </button>
           </div>
@@ -360,25 +464,37 @@ Payment: ${payment}
 function TopBar({
   lang,
   setLang,
-  leftButtonLabel,
+  canInstall,
+  onInstall,
+  leftLabel,
   onLeft
 }: {
-  lang: "EN" | "PT";
-  setLang: React.Dispatch<React.SetStateAction<"EN" | "PT">>;
-  leftButtonLabel?: string;
+  lang: Language;
+  setLang: React.Dispatch<React.SetStateAction<Language>>;
+  canInstall: boolean;
+  onInstall: () => Promise<void>;
+  leftLabel?: string;
   onLeft?: () => void;
 }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        marginTop: 16 // pushes below Android 3-dots area
+      }}
+    >
       <div>
-        {leftButtonLabel && onLeft && (
+        {leftLabel && onLeft && (
           <button style={tinyBtn} onClick={onLeft}>
-            {leftButtonLabel}
+            {leftLabel}
           </button>
         )}
       </div>
 
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <button
           onClick={() => setLang("EN")}
           style={{
@@ -400,6 +516,12 @@ function TopBar({
         >
           🇵🇹 PT
         </button>
+
+        {canInstall && (
+          <button style={{ ...tinyBtn, background: "#ff7a00", border: "none" }} onClick={() => void onInstall()}>
+            📲
+          </button>
+        )}
       </div>
     </div>
   );
@@ -417,7 +539,7 @@ function Qty({
       <button style={qtyBtn} onClick={() => setQty(Math.max(0, qty - 1))}>
         −
       </button>
-      <div style={{ minWidth: 24, textAlign: "center", fontWeight: 900 }}>{qty}</div>
+      <div style={{ minWidth: 26, textAlign: "center", fontWeight: 900 }}>{qty}</div>
       <button style={qtyBtn} onClick={() => setQty(qty + 1)}>
         +
       </button>
@@ -425,9 +547,17 @@ function Qty({
   );
 }
 
+/* ---------- styles ---------- */
+
 const labelStyle: React.CSSProperties = {
   fontWeight: 800,
   marginTop: 6
+};
+
+const radioRow: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  alignItems: "center"
 };
 
 const inputStyle: React.CSSProperties = {
@@ -443,7 +573,6 @@ const card: React.CSSProperties = {
   background: "rgba(0,0,0,0.62)",
   padding: 18,
   borderRadius: 20,
-  marginTop: 16,
   display: "flex",
   flexDirection: "column",
   gap: 10,
@@ -461,7 +590,7 @@ const primaryBtn: React.CSSProperties = {
   cursor: "pointer"
 };
 
-const primaryBtnFullWidth: React.CSSProperties = {
+const primaryBtnFull: React.CSSProperties = {
   ...primaryBtn,
   width: "100%"
 };
@@ -476,7 +605,7 @@ const secondaryBtn: React.CSSProperties = {
   cursor: "pointer"
 };
 
-const secondaryBtnFullWidth: React.CSSProperties = {
+const secondaryBtnFull: React.CSSProperties = {
   ...secondaryBtn,
   width: "100%"
 };
@@ -523,5 +652,6 @@ const modalInner: React.CSSProperties = {
   maxWidth: 420,
   display: "flex",
   flexDirection: "column",
-  gap: 14
+  gap: 14,
+  color: "#fff"
 };
