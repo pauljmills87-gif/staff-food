@@ -30,7 +30,22 @@ const BARS = [
   "Other"
 ];
 
-const t = {
+const translations: Record<
+  Lang,
+  {
+    tonight: string;
+    book: string;
+    delivered: string;
+    time: string;
+    name: string;
+    payment: string;
+    place: string;
+    back: string;
+    confirmTitle: string;
+    confirmSub: string;
+    openRevolut: string;
+  }
+> = {
   EN: {
     tonight: "Tonight’s Menu",
     book: "Book Your Meal",
@@ -128,48 +143,53 @@ ${menu.dessertName} x${dessertQty}
 
 Total: ${eur(total)}
 Payment: ${payment}
-    `;
+`;
 
     window.open(
       `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`,
       "_blank"
     );
 
-    if (payment === "REVOLUT") setRevolutPending(true);
+    if (payment === "REVOLUT") {
+      setRevolutPending(true);
+    }
+
     setScreen("CONFIRM");
   }
 
-  const landingStyle = {
+  const t = translations[lang];
+
+  const layoutStyle: React.CSSProperties = {
     minHeight: "100vh",
     backgroundImage: "url('/landing.png')",
     backgroundSize: "cover",
     backgroundPosition: "center",
     display: "flex",
-    flexDirection: "column" as const,
+    flexDirection: "column",
     justifyContent: "space-between",
-    padding: "20px"
+    padding: 20
   };
 
   if (screen === "CONFIRM") {
     return (
-      <div style={landingStyle}>
+      <div style={layoutStyle}>
         <LanguageToggle lang={lang} setLang={setLang} />
 
         <div style={card}>
-          <h2>{t[lang].confirmTitle}</h2>
-          <p>{t[lang].confirmSub}</p>
+          <h2>{t.confirmTitle}</h2>
+          <p>{t.confirmSub}</p>
 
           {revolutPending && (
             <button
               style={primaryBtn}
               onClick={() => window.open(REVOLUT_LINK, "_blank")}
             >
-              {t[lang].openRevolut}
+              {t.openRevolut}
             </button>
           )}
 
           <button style={secondaryBtn} onClick={() => setScreen("LANDING")}>
-            {t[lang].back}
+            {t.back}
           </button>
         </div>
       </div>
@@ -178,7 +198,7 @@ Payment: ${payment}
 
   if (screen === "ORDER") {
     return (
-      <div style={landingStyle}>
+      <div style={layoutStyle}>
         <LanguageToggle lang={lang} setLang={setLang} />
 
         <div style={card}>
@@ -190,9 +210,11 @@ Payment: ${payment}
         </div>
 
         <div style={card}>
-          <label>{t[lang].delivered}</label>
+          <label>{t.delivered}</label>
           <select value={bar} onChange={e => setBar(e.target.value)}>
-            {BARS.map(b => <option key={b}>{b}</option>)}
+            {BARS.map(b => (
+              <option key={b}>{b}</option>
+            ))}
           </select>
 
           {bar === "Other" && (
@@ -203,18 +225,20 @@ Payment: ${payment}
             />
           )}
 
-          <label>{t[lang].time}</label>
+          <label>{t.time}</label>
           <select value={slot} onChange={e => setSlot(e.target.value)}>
-            {buildSlots().map(s => <option key={s}>{s}</option>)}
+            {buildSlots().map(s => (
+              <option key={s}>{s}</option>
+            ))}
           </select>
 
-          <label>{t[lang].name}</label>
+          <label>{t.name}</label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
           />
 
-          <label>{t[lang].payment}</label>
+          <label>{t.payment}</label>
           <div>
             <label>
               <input
@@ -235,7 +259,7 @@ Payment: ${payment}
           </div>
 
           <button style={primaryBtn} onClick={placeOrder}>
-            {t[lang].place}
+            {t.place}
           </button>
         </div>
       </div>
@@ -243,16 +267,16 @@ Payment: ${payment}
   }
 
   return (
-    <div style={landingStyle}>
+    <div style={layoutStyle}>
       <LanguageToggle lang={lang} setLang={setLang} />
 
       <div style={{ marginTop: "auto", marginBottom: 80 }}>
         <button style={primaryBtn} onClick={() => setMenuOpen(true)}>
-          {t[lang].tonight}
+          {t.tonight}
         </button>
 
         <button style={secondaryBtn} onClick={() => setScreen("ORDER")}>
-          {t[lang].book}
+          {t.book}
         </button>
       </div>
 
@@ -279,20 +303,28 @@ Payment: ${payment}
   );
 }
 
-function LanguageToggle({ lang, setLang }: any) {
+function LanguageToggle({
+  lang,
+  setLang
+}: {
+  lang: Lang;
+  setLang: React.Dispatch<React.SetStateAction<Lang>>;
+}) {
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-      <button onClick={() => setLang("EN")}>
-        🇬🇧 EN
-      </button>
-      <button onClick={() => setLang("PT")}>
-        🇵🇹 PT
-      </button>
+      <button onClick={() => setLang("EN")}>🇬🇧 EN</button>
+      <button onClick={() => setLang("PT")}>🇵🇹 PT</button>
     </div>
   );
 }
 
-function Qty({ qty, setQty }: { qty: number; setQty: (n: number) => void }) {
+function Qty({
+  qty,
+  setQty
+}: {
+  qty: number;
+  setQty: React.Dispatch<React.SetStateAction<number>>;
+}) {
   return (
     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
       <button onClick={() => setQty(Math.max(0, qty - 1))}>-</button>
@@ -302,17 +334,17 @@ function Qty({ qty, setQty }: { qty: number; setQty: (n: number) => void }) {
   );
 }
 
-const card = {
+const card: React.CSSProperties = {
   background: "rgba(0,0,0,0.6)",
   padding: 20,
   borderRadius: 20,
   marginBottom: 20,
   display: "flex",
-  flexDirection: "column" as const,
+  flexDirection: "column",
   gap: 10
 };
 
-const primaryBtn = {
+const primaryBtn: React.CSSProperties = {
   padding: "16px",
   borderRadius: 20,
   background: "linear-gradient(135deg,#ff7a00,#ff2d55)",
@@ -323,7 +355,7 @@ const primaryBtn = {
   cursor: "pointer"
 };
 
-const secondaryBtn = {
+const secondaryBtn: React.CSSProperties = {
   padding: "14px",
   borderRadius: 20,
   background: "rgba(255,255,255,0.8)",
@@ -333,8 +365,8 @@ const secondaryBtn = {
   cursor: "pointer"
 };
 
-const modal = {
-  position: "fixed" as const,
+const modal: React.CSSProperties = {
+  position: "fixed",
   inset: 0,
   background: "rgba(0,0,0,0.8)",
   display: "flex",
@@ -342,13 +374,13 @@ const modal = {
   justifyContent: "center"
 };
 
-const modalInner = {
+const modalInner: React.CSSProperties = {
   background: "#111",
   padding: 20,
   borderRadius: 20,
   width: "90%",
   maxWidth: 400,
   display: "flex",
-  flexDirection: "column" as const,
+  flexDirection: "column",
   gap: 15
 };
