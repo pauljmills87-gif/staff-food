@@ -10,7 +10,6 @@ type MenuData = {
 
 type Screen = "LANDING" | "ORDER" | "CONFIRM";
 type PaymentMethod = "CASH" | "REVOLUT";
-type Lang = "EN" | "PT";
 
 const WHATSAPP_NUMBER = "351924236232";
 const REVOLUT_LINK = "https://revolut.me/jssicau3rs";
@@ -30,22 +29,7 @@ const BARS = [
   "Other"
 ];
 
-const translations: Record<
-  Lang,
-  {
-    tonight: string;
-    book: string;
-    delivered: string;
-    time: string;
-    name: string;
-    payment: string;
-    place: string;
-    back: string;
-    confirmTitle: string;
-    confirmSub: string;
-    openRevolut: string;
-  }
-> = {
+const translations = {
   EN: {
     tonight: "Tonight’s Menu",
     book: "Book Your Meal",
@@ -72,7 +56,7 @@ const translations: Record<
     confirmSub: "Vemo-nos à hora escolhida.",
     openRevolut: "Abrir Revolut para Pagar"
   }
-};
+} as const;
 
 function buildSlots() {
   const slots: string[] = [];
@@ -99,9 +83,10 @@ export default function App() {
   const [menu, setMenu] = useState<MenuData | null>(null);
   const [revolutPending, setRevolutPending] = useState(false);
 
-  const [lang, setLang] = useState<Lang>(
-    (localStorage.getItem("mb_lang") as Lang) || "EN"
-  );
+  const [lang, setLang] = useState<"EN" | "PT">(() => {
+    const saved = localStorage.getItem("mb_lang");
+    return saved === "PT" ? "PT" : "EN";
+  });
 
   const [name, setName] = useState(localStorage.getItem("mb_name") || "");
   const [bar, setBar] = useState(BARS[0]);
@@ -307,13 +292,30 @@ function LanguageToggle({
   lang,
   setLang
 }: {
-  lang: Lang;
-  setLang: React.Dispatch<React.SetStateAction<Lang>>;
+  lang: "EN" | "PT";
+  setLang: React.Dispatch<React.SetStateAction<"EN" | "PT">>;
 }) {
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-      <button onClick={() => setLang("EN")}>🇬🇧 EN</button>
-      <button onClick={() => setLang("PT")}>🇵🇹 PT</button>
+      <button
+        onClick={() => setLang("EN")}
+        style={{
+          opacity: lang === "EN" ? 1 : 0.5,
+          fontWeight: lang === "EN" ? 900 : 600
+        }}
+      >
+        🇬🇧 EN
+      </button>
+
+      <button
+        onClick={() => setLang("PT")}
+        style={{
+          opacity: lang === "PT" ? 1 : 0.5,
+          fontWeight: lang === "PT" ? 900 : 600
+        }}
+      >
+        🇵🇹 PT
+      </button>
     </div>
   );
 }
