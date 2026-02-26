@@ -10,6 +10,7 @@ type MenuData = {
 
 type Screen = "LANDING" | "ORDER" | "CONFIRM";
 type PaymentMethod = "CASH" | "REVOLUT";
+type Lang = "EN" | "PT";
 
 const WHATSAPP_NUMBER = "351924236232";
 const REVOLUT_LINK = "https://revolut.me/jssicau3rs";
@@ -28,6 +29,35 @@ const BARS = [
   "Sultao",
   "Other"
 ];
+
+const t = {
+  EN: {
+    tonight: "Tonight’s Menu",
+    book: "Book Your Meal",
+    delivered: "Delivered To",
+    time: "Time You Want Your Meal",
+    name: "Your Name",
+    payment: "Payment",
+    place: "Place Order",
+    back: "Back to Home",
+    confirmTitle: "Thank you — your order has been received.",
+    confirmSub: "We’ll see you at your scheduled time.",
+    openRevolut: "Open Revolut to Pay"
+  },
+  PT: {
+    tonight: "Menu de Hoje",
+    book: "Pedir Refeição",
+    delivered: "Entregar Em",
+    time: "Hora de Entrega",
+    name: "O Seu Nome",
+    payment: "Pagamento",
+    place: "Fazer Pedido",
+    back: "Voltar ao Início",
+    confirmTitle: "Obrigado — o seu pedido foi recebido.",
+    confirmSub: "Vemo-nos à hora escolhida.",
+    openRevolut: "Abrir Revolut para Pagar"
+  }
+};
 
 function buildSlots() {
   const slots: string[] = [];
@@ -54,6 +84,10 @@ export default function App() {
   const [menu, setMenu] = useState<MenuData | null>(null);
   const [revolutPending, setRevolutPending] = useState(false);
 
+  const [lang, setLang] = useState<Lang>(
+    (localStorage.getItem("mb_lang") as Lang) || "EN"
+  );
+
   const [name, setName] = useState(localStorage.getItem("mb_name") || "");
   const [bar, setBar] = useState(BARS[0]);
   const [otherBar, setOtherBar] = useState("");
@@ -63,14 +97,14 @@ export default function App() {
   const [payment, setPayment] = useState<PaymentMethod>("CASH");
 
   useEffect(() => {
+    localStorage.setItem("mb_lang", lang);
+  }, [lang]);
+
+  useEffect(() => {
     fetch("/menu.json?v=" + Date.now())
       .then(res => res.json())
       .then(data => setMenu(data));
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem("mb_name", name);
-  }, [name]);
 
   const total = useMemo(() => {
     if (!menu) return 0;
@@ -101,14 +135,7 @@ Payment: ${payment}
       "_blank"
     );
 
-    if (payment === "REVOLUT") {
-      setRevolutPending(true);
-    } else {
-      setRevolutPending(false);
-    }
-
-    setMainQty(0);
-    setDessertQty(0);
+    if (payment === "REVOLUT") setRevolutPending(true);
     setScreen("CONFIRM");
   }
 
@@ -119,42 +146,30 @@ Payment: ${payment}
     backgroundPosition: "center",
     display: "flex",
     flexDirection: "column" as const,
-    justifyContent: "flex-end",
-    padding: "0 20px 80px 20px"
-  };
-
-  const orderStyle = {
-    minHeight: "100vh",
-    backgroundImage: "url('/order-bg.png')",
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    padding: 20
+    justifyContent: "space-between",
+    padding: "20px"
   };
 
   if (screen === "CONFIRM") {
     return (
       <div style={landingStyle}>
+        <LanguageToggle lang={lang} setLang={setLang} />
+
         <div style={card}>
-          <h2>Thank you — your order has been received.</h2>
-          <p>We’ll see you at your scheduled time.</p>
+          <h2>{t[lang].confirmTitle}</h2>
+          <p>{t[lang].confirmSub}</p>
 
           {revolutPending && (
             <button
               style={primaryBtn}
               onClick={() => window.open(REVOLUT_LINK, "_blank")}
             >
-              Open Revolut to Pay
+              {t[lang].openRevolut}
             </button>
           )}
 
-          <button
-            style={secondaryBtn}
-            onClick={() => {
-              setRevolutPending(false);
-              setScreen("LANDING");
-            }}
-          >
-            Back to Home
+          <button style={secondaryBtn} onClick={() => setScreen("LANDING")}>
+            {t[lang].back}
           </button>
         </div>
       </div>
@@ -163,19 +178,19 @@ Payment: ${payment}
 
   if (screen === "ORDER") {
     return (
-      <div style={orderStyle}>
+      <div style={landingStyle}>
+        <LanguageToggle lang={lang} setLang={setLang} />
+
         <div style={card}>
           <h3>{menu?.mainName}</h3>
           <Qty qty={mainQty} setQty={setMainQty} />
-
           <h3>{menu?.dessertName}</h3>
           <Qty qty={dessertQty} setQty={setDessertQty} />
-
           <strong>Total: {eur(total)}</strong>
         </div>
 
         <div style={card}>
-          <label>Delivered To</label>
+          <label>{t[lang].delivered}</label>
           <select value={bar} onChange={e => setBar(e.target.value)}>
             {BARS.map(b => <option key={b}>{b}</option>)}
           </select>
@@ -188,18 +203,18 @@ Payment: ${payment}
             />
           )}
 
-          <label>Time You Want Your Meal</label>
+          <label>{t[lang].time}</label>
           <select value={slot} onChange={e => setSlot(e.target.value)}>
             {buildSlots().map(s => <option key={s}>{s}</option>)}
           </select>
 
-          <label>Your Name</label>
+          <label>{t[lang].name}</label>
           <input
             value={name}
             onChange={e => setName(e.target.value)}
           />
 
-          <label>Payment</label>
+          <label>{t[lang].payment}</label>
           <div>
             <label>
               <input
@@ -209,7 +224,6 @@ Payment: ${payment}
               />
               Cash
             </label>
-
             <label>
               <input
                 type="radio"
@@ -221,26 +235,26 @@ Payment: ${payment}
           </div>
 
           <button style={primaryBtn} onClick={placeOrder}>
-            Place Order
+            {t[lang].place}
           </button>
         </div>
-
-        <button style={secondaryBtn} onClick={() => setScreen("LANDING")}>
-          ← Back
-        </button>
       </div>
     );
   }
 
   return (
     <div style={landingStyle}>
-      <button style={primaryBtn} onClick={() => setMenuOpen(true)}>
-        Tonight’s Menu
-      </button>
+      <LanguageToggle lang={lang} setLang={setLang} />
 
-      <button style={secondaryBtn} onClick={() => setScreen("ORDER")}>
-        Book Your Meal
-      </button>
+      <div style={{ marginTop: "auto", marginBottom: 80 }}>
+        <button style={primaryBtn} onClick={() => setMenuOpen(true)}>
+          {t[lang].tonight}
+        </button>
+
+        <button style={secondaryBtn} onClick={() => setScreen("ORDER")}>
+          {t[lang].book}
+        </button>
+      </div>
 
       {menuOpen && (
         <div style={modal}>
@@ -261,6 +275,19 @@ Payment: ${payment}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LanguageToggle({ lang, setLang }: any) {
+  return (
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+      <button onClick={() => setLang("EN")}>
+        🇬🇧 EN
+      </button>
+      <button onClick={() => setLang("PT")}>
+        🇵🇹 PT
+      </button>
     </div>
   );
 }
