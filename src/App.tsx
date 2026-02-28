@@ -9,7 +9,7 @@ type MenuData = {
 };
 
 type Screen = "LANDING" | "ORDER" | "CONFIRM";
-type PaymentMethod = "CASH" | "REVOLUT";
+type PaymentMethod = "CASH" | "REVOLUT" | "MBWAY";
 type Language = "EN" | "PT";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -19,6 +19,7 @@ interface BeforeInstallPromptEvent extends Event {
 
 const WHATSAPP_NUMBER = "351924236232";
 const REVOLUT_LINK = "https://revolut.me/jssicau3rs";
+const MBWAY_NUMBER = "924236232";
 
 const BARS = [
   "Matt's bar",
@@ -54,7 +55,13 @@ const translations = {
     install: "📲 Install App",
     iosGuideLine1: "Install this app on iPhone:",
     iosGuideLine2: "Tap Share → Add to Home Screen",
-    ok: "OK"
+    ok: "OK",
+
+    // MBWay additions
+    totalToPay: "Total to pay",
+    payViaMbway: "Please complete payment via MBWay:",
+    copy: "Copy",
+    copied: "Copied ✓"
   },
   PT: {
     tonight: "Menu de Hoje",
@@ -74,7 +81,13 @@ const translations = {
     install: "📲 Instalar App",
     iosGuideLine1: "Instalar no iPhone:",
     iosGuideLine2: "Partilhar → Adicionar ao Ecrã Principal",
-    ok: "OK"
+    ok: "OK",
+
+    // MBWay additions
+    totalToPay: "Total a pagar",
+    payViaMbway: "Por favor, pague por MBWay:",
+    copy: "Copiar",
+    copied: "Copiado ✓"
   }
 } as const;
 
@@ -123,6 +136,10 @@ export default function App() {
   const [dessertQty, setDessertQty] = useState<number>(0);
   const [payment, setPayment] = useState<PaymentMethod>("CASH");
   const [revolutPending, setRevolutPending] = useState<boolean>(false);
+
+  // ✅ MBWay additions
+  const [totalToPay, setTotalToPay] = useState<number>(0);
+  const [copied, setCopied] = useState<boolean>(false);
 
   // Android install prompt support
   const [deferredInstall, setDeferredInstall] = useState<BeforeInstallPromptEvent | null>(null);
@@ -193,6 +210,22 @@ export default function App() {
     return mainQty * menu.mainPrice + dessertQty * menu.dessertPrice;
   }, [menu, mainQty, dessertQty]);
 
+  // ✅ MBWay copy helper
+  function copyMBWayNumber(): void {
+    // Clipboard API works in HTTPS/PWA (Vercel is HTTPS)
+    navigator.clipboard
+      .writeText(MBWAY_NUMBER)
+      .then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      })
+      .catch(() => {
+        // fallback: still show copied feedback if clipboard blocked
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1800);
+      });
+  }
+
   function placeOrder(): void {
     if (!menu) return;
 
@@ -217,6 +250,9 @@ Payment: ${payment}
       `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`,
       "_blank"
     );
+
+    // ✅ Store total BEFORE resetting quantities (so confirm shows correct total)
+    setTotalToPay(total);
 
     // iOS-safe: show button on confirm
     setRevolutPending(payment === "REVOLUT");
@@ -260,6 +296,7 @@ Payment: ${payment}
           leftLabel={t.backHome}
           onLeft={() => {
             setRevolutPending(false);
+            setCopied(false);
             setScreen("LANDING");
           }}
         />
@@ -268,6 +305,11 @@ Payment: ${payment}
           <div style={{ ...card, width: "100%", maxWidth: 520, margin: "0 auto" }}>
             <h2 style={{ margin: 0 }}>{t.confirmTitle}</h2>
             <p style={{ marginTop: 8, marginBottom: 0 }}>{t.confirmSub}</p>
+
+            {/* ✅ Always show total to pay on confirm */}
+            <div style={{ marginTop: 12, fontWeight: 900 }}>
+              {t.totalToPay}: {eur(totalToPay)}
+            </div>
 
             {revolutPending && (
               <button
@@ -278,10 +320,51 @@ Payment: ${payment}
               </button>
             )}
 
+            {/* ✅ MBWay confirm block */}
+            {payment === "MBWAY" && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ marginBottom: 8 }}>{t.payViaMbway}</div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: 12,
+                    borderRadius: 16,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(255,255,255,0.08)"
+                  }}
+                >
+                  <div style={{ fontWeight: 900, fontSize: 16 }}>{MBWAY_NUMBER}</div>
+
+                  <button
+                    style={{
+                      ...tinyBtn,
+                      background: "rgba(255,255,255,0.86)",
+                      color: "#000",
+                      border: "none"
+                    }}
+                    onClick={copyMBWayNumber}
+                  >
+                    {t.copy}
+                  </button>
+                </div>
+
+                {copied && (
+                  <div style={{ marginTop: 8, fontWeight: 900 }}>
+                    {t.copied}
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               style={{ ...secondaryBtn, marginTop: 12 }}
               onClick={() => {
                 setRevolutPending(false);
+                setCopied(false);
                 setScreen("LANDING");
               }}
             >
@@ -320,7 +403,11 @@ Payment: ${payment}
 
         <div style={{ ...card, width: "100%", maxWidth: 520, margin: "16px auto 0 auto" }}>
           <label style={labelStyle}>{t.delivered}</label>
-          <select style={inputStyle} value={bar} onChange={(e) => setBar(e.target.value as (typeof BARS)[number])}>
+          <select
+            style={inputStyle}
+            value={bar}
+            onChange={(e) => setBar(e.target.value as (typeof BARS)[number])}
+          >
             {BARS.map((b) => (
               <option key={b} value={b}>
                 {b}
@@ -359,6 +446,7 @@ Payment: ${payment}
               />
               Cash
             </label>
+
             <label style={radioRow}>
               <input
                 type="radio"
@@ -366,6 +454,16 @@ Payment: ${payment}
                 onChange={() => setPayment("REVOLUT")}
               />
               Revolut
+            </label>
+
+            {/* ✅ keep MBWay consistent styling */}
+            <label style={radioRow}>
+              <input
+                type="radio"
+                checked={payment === "MBWAY"}
+                onChange={() => setPayment("MBWAY")}
+              />
+              MBWay
             </label>
           </div>
 
@@ -384,15 +482,19 @@ Payment: ${payment}
   // LANDING SCREEN
   return (
     <div style={landingStyle}>
-      <TopBar
-        lang={lang}
-        setLang={setLang}
-        canInstall={canInstall}
-        onInstall={triggerInstall}
-      />
+      <TopBar lang={lang} setLang={setLang} canInstall={canInstall} onInstall={triggerInstall} />
 
       {/* lower third stacked buttons */}
-      <div style={{ marginTop: "auto", marginBottom: 80, width: "100%", maxWidth: 520, marginLeft: "auto", marginRight: "auto" }}>
+      <div
+        style={{
+          marginTop: "auto",
+          marginBottom: 80,
+          width: "100%",
+          maxWidth: 520,
+          marginLeft: "auto",
+          marginRight: "auto"
+        }}
+      >
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <button style={primaryBtnFull} onClick={() => setMenuOpen(true)}>
             {t.tonight}
@@ -424,14 +526,8 @@ Payment: ${payment}
 
       {/* Tonight’s Menu modal */}
       {menuOpen && (
-        <div
-          style={modal}
-          onClick={() => setMenuOpen(false)}
-        >
-          <div
-            style={modalInner}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div style={modal} onClick={() => setMenuOpen(false)}>
+          <div style={modalInner} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontWeight: 900 }}>{t.tonight}</div>
               <button style={tinyBtn} onClick={() => setMenuOpen(false)}>
@@ -518,7 +614,10 @@ function TopBar({
         </button>
 
         {canInstall && (
-          <button style={{ ...tinyBtn, background: "#ff7a00", border: "none" }} onClick={() => void onInstall()}>
+          <button
+            style={{ ...tinyBtn, background: "#ff7a00", border: "none" }}
+            onClick={() => void onInstall()}
+          >
             📲
           </button>
         )}
